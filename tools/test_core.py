@@ -21,6 +21,12 @@ def edit(path: str, line: int, old: str, new: str) -> FileChange:
 
 
 class CoreTests(unittest.TestCase):
+    def test_class_setup_fixture_covers_executor_collection(self):
+        fixtures = json.loads((Path(__file__).resolve().parents[1] / "fixture_index.json").read_text(encoding="utf-8"))
+        users = fixtures["tests/fixtures/optimizer/tpc-ds/tpc-ds.sql"]
+        self.assertIn("tests/test_executor.py::TestExecutor::test_execute_tpcds", users)
+        self.assertIn("tests/test_executor.py::TestExecutor::test_array_slice", users)
+
     def test_patch_line_numbers_and_content_that_looks_like_header(self):
         patch = """diff --git a/tests/fixtures/x.sql b/tests/fixtures/x.sql
 --- a/tests/fixtures/x.sql

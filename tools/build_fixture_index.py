@@ -21,11 +21,21 @@ def main() -> None:
         source_text = source.read_text(encoding="utf-8")
         tree = ast.parse(source_text, filename=str(source))
         for klass in (node for node in tree.body if isinstance(node, ast.ClassDef)):
+            class_tests = {
+                f"{relative}::{klass.name}::{method.name}"
+                for method in klass.body
+                if isinstance(method, ast.FunctionDef)
+                and f"{relative}::{klass.name}::{method.name}" in known_ids
+            }
             for method in (node for node in klass.body if isinstance(node, ast.FunctionDef)):
                 test_id = f"{relative}::{klass.name}::{method.name}"
-                if test_id not in known_ids:
+                recipients = {test_id} if test_id in known_ids else (
+                    class_tests if method.name in {"setUpClass", "setUp", "setup_class", "setup_method"} else set()
+                )
+                if not recipients:
                     continue
-                method_sources.append((test_id, ast.get_source_segment(source_text, method) or ""))
+                if test_id in known_ids:
+                    method_sources.append((test_id, ast.get_source_segment(source_text, method) or ""))
                 for call in (node for node in ast.walk(method) if isinstance(node, ast.Call)):
                     if not call.args or not isinstance(call.args[0], ast.Constant):
                         continue
@@ -36,9 +46,9 @@ def main() -> None:
                         call.func.id if isinstance(call.func, ast.Name) else ""
                     )
                     if func_name == "check_file":
-                        index[f"tests/fixtures/optimizer/{arg}.sql"].add(test_id)
+                        index[f"tests/fixtures/optimizer/{arg}.sql"].update(recipients)
                     elif func_name in {"load_sql_fixtures", "load_sql_fixture_pairs"}:
-                        index[f"tests/fixtures/{arg}"].add(test_id)
+                        index[f"tests/fixtures/{arg}"].update(recipients)
     for fixture in (source_root / "tests" / "fixtures").rglob("*"):
         if not fixture.is_file():
             continue
