@@ -56,7 +56,12 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                     re.findall(r"\bexp\.([A-Z]\w+)\b", "\n".join(change.removed + change.added))
                 )
                 for class_name in metadata_classes:
-                    selected.update(typing_usage.get(f"{dialect}:{class_name}", []))
+                    if dialect == "__init__":
+                        for key, test_ids in typing_usage.items():
+                            if key.endswith(f":{class_name}"):
+                                selected.update(test_ids)
+                    else:
+                        selected.update(typing_usage.get(f"{dialect}:{class_name}", []))
             if change.path in {"sqlglot/__init__.py", "sqlglot/dialects/__init__.py", "sqlglot/dialects/dialect.py"}:
                 selected.add("tests/dialects/test_dialect.py::TestDialect::test_lazy_load")
             if change.path == "sqlglot/parser.py" and any("max_nodes" in line or "_node_count" in line for line in change.removed + change.added):

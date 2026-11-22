@@ -127,6 +127,18 @@ class CoreTests(unittest.TestCase):
         )
         self.assertEqual(selected, {"A", "B"})
 
+    def test_base_typing_metadata_reaches_all_dialects(self):
+        change = edit("sqlglot/typing/__init__.py", 60, "exp.Sign: old", "exp.Sign: new")
+        selected = impacted_tests(
+            [change], {}, [], {}, [], {},
+            {"class_assignment_lines": {}, "condition_starts": {}},
+            {}, {}, {},
+            {"sqlglot/typing/__init__.py": {"60": ["Sign"]}},
+            {"snowflake:Sign": ["A"], "postgres:Sign": ["B"]},
+            {}, {"A": 0, "B": 1},
+        )
+        self.assertTrue({"A", "B"} <= selected)
+
 
 if __name__ == "__main__":
     unittest.main()
