@@ -141,6 +141,19 @@ class CoreTests(unittest.TestCase):
         )
         self.assertEqual(selected, {"A"})
 
+    def test_module_constant_reaches_runtime_reader(self):
+        change = edit("sqlglot/constants.py", 20, 'THING = "old"', 'THING = "new"')
+        selected = impacted_tests(
+            [change], {}, ["A", "B"], {}, [], {},
+            {"class_assignment_lines": {}, "condition_starts": {}},
+            {}, {}, {}, {}, {}, {}, {"A": 0, "B": 1},
+            module_index={
+                "declarations": {"sqlglot/constants.py": {"20": ["THING"]}},
+                "reads": {"sqlglot/constants.py:THING": [1]},
+            },
+        )
+        self.assertEqual(selected, {"B"})
+
     def test_typing_metadata_reads_are_selected(self):
         change = edit("sqlglot/typing/snowflake.py", 260, "exp.Sign: value", "exp.HexString: value")
         selected = impacted_tests(

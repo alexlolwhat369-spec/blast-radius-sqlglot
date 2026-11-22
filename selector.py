@@ -24,9 +24,10 @@ def read_index(path: Path) -> dict:
         return json.load(stream)
 
 
-def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, typing_index: dict, typing_usage: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int], function_index: dict | None = None) -> set[str]:
+def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, typing_index: dict, typing_usage: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int], function_index: dict | None = None, module_index: dict | None = None) -> set[str]:
     selected: set[str] = set()
     function_index = function_index or {}
+    module_index = module_index or {"declarations": {}, "reads": {}}
     executable_source_changes = [change for change in changes if change.path.startswith("sqlglot/") and change.path.endswith(".py") and not change.comment_only]
     single_source_change = len(executable_source_changes) == 1
     for change in changes:
@@ -153,6 +154,32 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                 if module_users:
                     selected.update(module_users)
                     continue
+            module_declarations = module_index["declarations"].get(change.path, {})
+            if touched and all(str(line) in module_declarations for line in touched):
+                if os.environ.get("BLAST_MODULE_PROBE") == "1":
+                    selected.update(test_by_id)
+                    continue
+                symbols = {
+                    symbol
+                    for line in touched
+                    for symbol in module_declarations[str(line)]
+                }
+                readers = {
+                    coverage_ids[index]
+                    for symbol in symbols
+                    for index in module_index["reads"].get(f"{change.path}:{symbol}", [])
+                }
+                if readers:
+                    selected.update(readers)
+                    continue
+                module_users = {
+                    coverage_ids[index]
+                    for indexes in coverage.get(change.path, {}).values()
+                    for index in indexes
+                }
+                if module_users:
+                    selected.update(module_users)
+                    continue
             for line in touched:
                 direct = lines.get(str(line), [])
                 file_selected.update(coverage_ids[index] for index in direct)
@@ -200,12 +227,13 @@ def main() -> None:
     typing_index = read_index(ROOT / "typing_index.json.gz")
     typing_usage = read_index(ROOT / "typing_usage.json.gz")
     function_index = read_index(ROOT / "function_index.json.gz")
+    module_index = read_index(ROOT / "module_index.json.gz")
     tests_by_file = {}
     for test in tests:
         tests_by_file.setdefault(test["file"], []).append(test["id"])
     for patch_file in sorted((DATA / "commits").glob("*.patch")):
         changes = parse_patch(patch_file.read_text(encoding="utf-8"))
-        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id, function_index=function_index)
+        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id, function_index=function_index, module_index=module_index)
         selected = {test_by_id[test_id] for test_id in selected_ids if test_id in test_by_id}
         workers = split(selected, milliseconds)
         sys.stdout.write(json.dumps({"commit": patch_file.stem, "workers": workers}, separators=(",", ":")) + "\n")
