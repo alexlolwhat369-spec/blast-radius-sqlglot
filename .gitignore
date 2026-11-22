@@ -5,3 +5,6 @@ output.jsonl
 .coverage*
 expression_usage.json
 typing_usage.json
+table_usage*.json
+table_usage*.json.gz
+table_trace*.log
