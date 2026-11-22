@@ -24,7 +24,7 @@ def read_index(path: Path) -> dict:
         return json.load(stream)
 
 
-def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, test_index: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int]) -> set[str]:
+def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, test_index: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int]) -> set[str]:
     selected: set[str] = set()
     executable_source_changes = [change for change in changes if change.path.startswith("sqlglot/") and change.path.endswith(".py") and not change.comment_only]
     single_source_change = len(executable_source_changes) == 1
@@ -63,6 +63,17 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
             file_selected: set[str] = set()
             assignment_lines = set(code_index["class_assignment_lines"].get(change.path, []))
             if touched and touched <= assignment_lines:
+                if change.path.startswith("sqlglot/expressions/"):
+                    module = change.path.removesuffix(".py").replace("/", ".")
+                    class_names = {
+                        code_index["class_assignment_classes"].get(change.path, {}).get(str(line))
+                        for line in touched
+                    }
+                    for class_name in class_names - {None}:
+                        file_selected.update(expression_usage.get(f"{module}:{class_name}", []))
+                    if file_selected:
+                        selected.update(file_selected)
+                        continue
                 symbol_match = re.match(r"\s*([A-Z][A-Z0-9_]*)\s*=", change.removed[0]) if change.removed else None
                 if change.path.startswith("sqlglot/dialects/"):
                     symbol = symbol_match.group(1) if symbol_match else code_index.get("class_assignment_symbols", {}).get(change.path, {}).get(str(min(touched)))
@@ -130,13 +141,14 @@ def main() -> None:
     code_index = read_index(ROOT / "code_index.json.gz")
     dialect_index = json.loads((ROOT / "dialect_index.json").read_text(encoding="utf-8"))
     escape_index = json.loads((ROOT / "escape_index.json").read_text(encoding="utf-8"))
+    expression_usage = read_index(ROOT / "expression_usage.json.gz")
     test_index = read_index(ROOT / "test_index.json.gz")
     tests_by_file = {}
     for test in tests:
         tests_by_file.setdefault(test["file"], []).append(test["id"])
     for patch_file in sorted((DATA / "commits").glob("*.patch")):
         changes = parse_patch(patch_file.read_text(encoding="utf-8"))
-        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, test_index, tests_by_file, test_by_id)
+        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, test_index, tests_by_file, test_by_id)
         selected = {test_by_id[test_id] for test_id in selected_ids if test_id in test_by_id}
         workers = split(selected, milliseconds)
         sys.stdout.write(json.dumps({"commit": patch_file.stem, "workers": workers}, separators=(",", ":")) + "\n")
