@@ -24,8 +24,9 @@ def read_index(path: Path) -> dict:
         return json.load(stream)
 
 
-def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, typing_index: dict, typing_usage: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int]) -> set[str]:
+def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, typing_index: dict, typing_usage: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int], function_index: dict | None = None) -> set[str]:
     selected: set[str] = set()
+    function_index = function_index or {}
     executable_source_changes = [change for change in changes if change.path.startswith("sqlglot/") and change.path.endswith(".py") and not change.comment_only]
     single_source_change = len(executable_source_changes) == 1
     for change in changes:
@@ -119,10 +120,19 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                     )
                     continue
             for line in touched:
-                file_selected.update(coverage_ids[index] for index in lines.get(str(line), []))
+                direct = lines.get(str(line), [])
+                file_selected.update(coverage_ids[index] for index in direct)
                 start = code_index["condition_starts"].get(change.path, {}).get(str(line))
                 if start is not None:
                     file_selected.update(coverage_ids[index] for index in lines.get(str(start), []))
+                if not direct and start is None:
+                    containing = [
+                        entry for entry in function_index.get(change.path, [])
+                        if entry[0] <= line <= entry[1]
+                    ]
+                    if containing:
+                        narrowest = min(containing, key=lambda entry: entry[1] - entry[0])
+                        file_selected.update(coverage_ids[index] for index in narrowest[2])
             selected.update(file_selected)
             if change.path == "sqlglot/serde.py":
                 selected.update(process_tests)
@@ -155,12 +165,13 @@ def main() -> None:
     expression_usage = read_index(ROOT / "expression_usage.json.gz")
     typing_index = read_index(ROOT / "typing_index.json.gz")
     typing_usage = read_index(ROOT / "typing_usage.json.gz")
+    function_index = read_index(ROOT / "function_index.json.gz")
     tests_by_file = {}
     for test in tests:
         tests_by_file.setdefault(test["file"], []).append(test["id"])
     for patch_file in sorted((DATA / "commits").glob("*.patch")):
         changes = parse_patch(patch_file.read_text(encoding="utf-8"))
-        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id)
+        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id, function_index=function_index)
         selected = {test_by_id[test_id] for test_id in selected_ids if test_id in test_by_id}
         workers = split(selected, milliseconds)
         sys.stdout.write(json.dumps({"commit": patch_file.stem, "workers": workers}, separators=(",", ":")) + "\n")

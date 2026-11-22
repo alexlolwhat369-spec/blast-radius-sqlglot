@@ -107,6 +107,16 @@ class CoreTests(unittest.TestCase):
         )
         self.assertEqual(selected, {"A", "B"})
 
+    def test_uncovered_line_uses_narrowest_enclosing_function(self):
+        change = edit("sqlglot/x.py", 20, "if value:", "if not value:")
+        selected = impacted_tests(
+            [change], {"sqlglot/x.py": {}}, ["A", "B"], {}, [], {},
+            {"class_assignment_lines": {}, "condition_starts": {}},
+            {}, {}, {}, {}, {}, {}, {"A": 0, "B": 1},
+            function_index={"sqlglot/x.py": [[1, 50, [0, 1]], [15, 25, [1]]]},
+        )
+        self.assertEqual(selected, {"B"})
+
     def test_typing_metadata_reads_are_selected(self):
         change = edit("sqlglot/typing/snowflake.py", 260, "exp.Sign: value", "exp.HexString: value")
         selected = impacted_tests(
