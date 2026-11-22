@@ -24,10 +24,12 @@ def read_index(path: Path) -> dict:
         return json.load(stream)
 
 
-def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, typing_index: dict, typing_usage: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int], function_index: dict | None = None, module_index: dict | None = None) -> set[str]:
+def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, typing_index: dict, typing_usage: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int], function_index: dict | None = None, module_index: dict | None = None, table_index: dict | None = None, table_readers: dict | None = None) -> set[str]:
     selected: set[str] = set()
     function_index = function_index or {}
     module_index = module_index or {"declarations": {}, "reads": {}}
+    table_index = table_index or {}
+    table_readers = table_readers or {}
     executable_source_changes = [change for change in changes if change.path.startswith("sqlglot/") and change.path.endswith(".py") and not change.comment_only]
     single_source_change = len(executable_source_changes) == 1
     for change in changes:
@@ -74,6 +76,20 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                 if os.environ.get("BLAST_CLASS_PROBE") == "1":
                     selected.update(test_by_id)
                     continue
+                entries = {
+                    tuple(entry)
+                    for line in touched
+                    for entry in table_index.get(change.path, {}).get(str(line), [])
+                }
+                if len(change.removed) == len(change.added) == 1:
+                    changed_keys = changed_mapping_values(change.removed[0], change.added[0])
+                    if changed_keys is not None:
+                        entries = {entry for entry in entries if entry[2] in changed_keys}
+                module = change.path.removesuffix(".py").replace("/", ".")
+                for klass, attribute, key in entries:
+                    prefix = f"{module}:{klass}:{attribute}:"
+                    selected.update(table_readers.get(prefix + key, []))
+                    selected.update(table_readers.get(prefix + "*", []))
                 if change.path.startswith("sqlglot/expressions/"):
                     module = change.path.removesuffix(".py").replace("/", ".")
                     class_names = {
@@ -228,12 +244,14 @@ def main() -> None:
     typing_usage = read_index(ROOT / "typing_usage.json.gz")
     function_index = read_index(ROOT / "function_index.json.gz")
     module_index = read_index(ROOT / "module_index.json.gz")
+    table_index = read_index(ROOT / "table_index.json.gz")
+    table_readers = read_index(ROOT / "table_readers.json.gz")
     tests_by_file = {}
     for test in tests:
         tests_by_file.setdefault(test["file"], []).append(test["id"])
     for patch_file in sorted((DATA / "commits").glob("*.patch")):
         changes = parse_patch(patch_file.read_text(encoding="utf-8"))
-        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id, function_index=function_index, module_index=module_index)
+        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id, function_index=function_index, module_index=module_index, table_index=table_index, table_readers=table_readers)
         selected = {test_by_id[test_id] for test_id in selected_ids if test_id in test_by_id}
         workers = split(selected, milliseconds)
         sys.stdout.write(json.dumps({"commit": patch_file.stem, "workers": workers}, separators=(",", ":")) + "\n")

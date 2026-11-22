@@ -154,6 +154,19 @@ class CoreTests(unittest.TestCase):
         )
         self.assertEqual(selected, {"B"})
 
+    def test_table_key_trace_reaches_cross_dialect_test(self):
+        change = edit("sqlglot/parsers/dremio.py", 20, '"X": old', '"X": new')
+        selected = impacted_tests(
+            [change], {}, [], {}, [], {},
+            {"class_assignment_lines": {"sqlglot/parsers/dremio.py": [20]},
+             "condition_starts": {}},
+            {"primary": {"A": ["dremio"]}, "secondary": {}},
+            {}, {}, {}, {}, {}, {"A": 0, "B": 1},
+            table_index={"sqlglot/parsers/dremio.py": {"20": [["DremioParser", "FUNCTIONS", "X"]]}},
+            table_readers={"sqlglot.parsers.dremio:DremioParser:FUNCTIONS:X": ["B"]},
+        )
+        self.assertEqual(selected, {"A", "B"})
+
     def test_typing_metadata_reads_are_selected(self):
         change = edit("sqlglot/typing/snowflake.py", 260, "exp.Sign: value", "exp.HexString: value")
         selected = impacted_tests(
