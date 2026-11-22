@@ -25,6 +25,12 @@ def main() -> None:
         source_text = source.read_text(encoding="utf-8")
         tree = ast.parse(source_text, filename=str(source))
         unsafe = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.JoinedStr) or (
+                isinstance(node, ast.Constant) and isinstance(node.value, str)
+            ):
+                if getattr(node, "end_lineno", node.lineno) > node.lineno:
+                    unsafe.update(range(node.lineno + 1, node.end_lineno + 1))
         for token in tokenize.generate_tokens(io.StringIO(source_text).readline):
             if token.type == tokenize.STRING and token.end[0] > token.start[0]:
                 unsafe.update(range(token.start[0] + 1, token.end[0] + 1))
