@@ -24,7 +24,7 @@ def read_index(path: Path) -> dict:
         return json.load(stream)
 
 
-def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, test_index: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int]) -> set[str]:
+def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: dict, process_tests: list[str], semantic_index: dict, code_index: dict, dialect_index: dict, escape_index: dict, expression_usage: dict, typing_index: dict, typing_usage: dict, tests_by_file: dict[str, list[str]], test_by_id: dict[str, int]) -> set[str]:
     selected: set[str] = set()
     executable_source_changes = [change for change in changes if change.path.startswith("sqlglot/") and change.path.endswith(".py") and not change.comment_only]
     single_source_change = len(executable_source_changes) == 1
@@ -36,14 +36,7 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
             selected.update(fixture_tests)
             continue
         if change.path.startswith("tests/") and change.path.endswith(".py"):
-            file_tests = set()
-            for line in change.old_lines or change.anchors:
-                entries = [entry for entry in test_index.get(change.path, []) if entry[0] <= line <= entry[1]]
-                if entries:
-                    file_tests.update(min(entries, key=lambda entry: entry[1] - entry[0])[2])
-            if not file_tests:
-                file_tests.update(tests_by_file.get(change.path, test_by_id))
-            selected.update(file_tests)
+            selected.update(tests_by_file.get(change.path, test_by_id))
             continue
         if change.path.startswith("sqlglot/") and change.path.endswith(".py"):
             if change.comment_only:
@@ -54,12 +47,17 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                 continue
             if change.path.startswith("sqlglot/typing/"):
                 selected.add("tests/test_typing.py::TestTyping::test_no_redundant_expression_metadata")
+                dialect = Path(change.path).stem
+                metadata_lines = typing_index.get(change.path, {})
+                for line in change.old_lines | change.anchors:
+                    for class_name in metadata_lines.get(str(line), []):
+                        selected.update(typing_usage.get(f"{dialect}:{class_name}", []))
             if change.path in {"sqlglot/__init__.py", "sqlglot/dialects/__init__.py", "sqlglot/dialects/dialect.py"}:
                 selected.add("tests/dialects/test_dialect.py::TestDialect::test_lazy_load")
             if change.path == "sqlglot/parser.py" and any("max_nodes" in line or "_node_count" in line for line in change.removed + change.added):
                 selected.add("tests/test_parser.py::TestParser::test_max_nodes")
             lines = coverage.get(change.path, {})
-            touched = change.old_lines or change.anchors
+            touched = change.old_lines | change.anchors
             file_selected: set[str] = set()
             assignment_lines = set(code_index["class_assignment_lines"].get(change.path, []))
             if touched and touched <= assignment_lines:
@@ -76,9 +74,14 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                         continue
                 symbol_match = re.match(r"\s*([A-Z][A-Z0-9_]*)\s*=", change.removed[0]) if change.removed else None
                 if change.path.startswith("sqlglot/dialects/"):
-                    symbol = symbol_match.group(1) if symbol_match else code_index.get("class_assignment_symbols", {}).get(change.path, {}).get(str(min(touched)))
+                    symbols = {
+                        code_index.get("class_assignment_symbols", {}).get(change.path, {}).get(str(line))
+                        for line in touched
+                    } - {None}
+                    if symbol_match:
+                        symbols.add(symbol_match.group(1))
                     dialect = Path(change.path).stem
-                    if single_source_change and symbol == "NUMERIC_ESCAPES" and len(change.removed) == len(change.added) == 1:
+                    if single_source_change and symbols == {"NUMERIC_ESCAPES"} and len(change.removed) == len(change.added) == 1:
                         keys = changed_mapping_values(change.removed[0], change.added[0])
                         if keys is not None:
                             relevant_ids = {
@@ -90,6 +93,7 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                             continue
                     relevant_ids = {
                         test_id
+                        for symbol in symbols
                         for source, line in code_index["attribute_reads"].get(symbol, [])
                         for index in coverage.get(source, {}).get(str(line), [])
                         if (test_id := coverage_ids[index]) and (
@@ -141,13 +145,14 @@ def main() -> None:
     dialect_index = json.loads((ROOT / "dialect_index.json").read_text(encoding="utf-8"))
     escape_index = json.loads((ROOT / "escape_index.json").read_text(encoding="utf-8"))
     expression_usage = read_index(ROOT / "expression_usage.json.gz")
-    test_index = read_index(ROOT / "test_index.json.gz")
+    typing_index = read_index(ROOT / "typing_index.json.gz")
+    typing_usage = read_index(ROOT / "typing_usage.json.gz")
     tests_by_file = {}
     for test in tests:
         tests_by_file.setdefault(test["file"], []).append(test["id"])
     for patch_file in sorted((DATA / "commits").glob("*.patch")):
         changes = parse_patch(patch_file.read_text(encoding="utf-8"))
-        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, test_index, tests_by_file, test_by_id)
+        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id)
         selected = {test_by_id[test_id] for test_id in selected_ids if test_id in test_by_id}
         workers = split(selected, milliseconds)
         sys.stdout.write(json.dumps({"commit": patch_file.stem, "workers": workers}, separators=(",", ":")) + "\n")

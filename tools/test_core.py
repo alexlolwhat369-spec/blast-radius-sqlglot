@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from patch_model import FileChange, parse_patch
 from scheduler import split
 from semantic import changed_mapping_values, proven_equivalent
+from selector import impacted_tests
 
 
 INDEX = json.loads((Path(__file__).resolve().parents[1] / "semantic_index.json").read_text(encoding="utf-8"))
@@ -33,7 +34,7 @@ class CoreTests(unittest.TestCase):
         change = parse_patch(patch)[0]
         self.assertEqual(change.path, "tests/fixtures/x.sql")
         self.assertEqual(change.old_lines, {9})
-        self.assertEqual(change.anchors, {10})
+        self.assertEqual(change.anchors, {9})
         self.assertEqual(change.removed, ["-- comment"])
         self.assertEqual(change.added, ["++ added"])
 
@@ -42,6 +43,20 @@ class CoreTests(unittest.TestCase):
         workers = split(set(durations), durations)
         self.assertEqual(len(workers), 2)
         self.assertEqual({n for worker in workers for n in worker}, set(durations))
+
+    def test_diff_tracks_insertions_in_a_second_hunk(self):
+        patch = """diff --git a/sqlglot/x.py b/sqlglot/x.py
+--- a/sqlglot/x.py
++++ b/sqlglot/x.py
+@@ -10 +10 @@
+-value = 1
++value = 2
+@@ -20,0 +21 @@
++another = 3
+"""
+        change = parse_patch(patch)[0]
+        self.assertEqual(change.old_lines, {10})
+        self.assertEqual(change.anchors, {10, 20})
 
     def test_proven_identity_equivalence_requires_a_known_type(self):
         self.assertTrue(proven_equivalent(edit(
@@ -78,6 +93,31 @@ class CoreTests(unittest.TestCase):
     def test_mapping_delta_needs_stable_keys(self):
         self.assertEqual(changed_mapping_values('X = {"u": (16, 4), "x": (16, 2)}', 'X = {"u": (17, 4), "x": (16, 2)}'), {"u"})
         self.assertIsNone(changed_mapping_values('X = {"u": (16, 4)}', 'X = {"u": (17, 4), "x": (16, 2)}'))
+
+    def test_source_edit_and_addition_cover_both_hunks(self):
+        change = FileChange(
+            path="sqlglot/x.py", old_lines={10}, anchors={10, 20},
+            removed=["value = 1"], added=["value = 2", "value = 3"],
+        )
+        selected = impacted_tests(
+            [change], {"sqlglot/x.py": {"10": [0], "20": [1]}},
+            ["A", "B"], {}, [], {},
+            {"class_assignment_lines": {}, "condition_starts": {}},
+            {}, {}, {}, {}, {}, {}, {"A": 0, "B": 1},
+        )
+        self.assertEqual(selected, {"A", "B"})
+
+    def test_typing_metadata_reads_are_selected(self):
+        change = edit("sqlglot/typing/snowflake.py", 260, "value = 1", "value = 2")
+        selected = impacted_tests(
+            [change], {}, [], {}, [], {},
+            {"class_assignment_lines": {}, "condition_starts": {}},
+            {}, {}, {},
+            {"sqlglot/typing/snowflake.py": {"260": ["Sign"]}},
+            {"snowflake:Sign": ["A"]},
+            {}, {"A": 0},
+        )
+        self.assertIn("A", selected)
 
 
 if __name__ == "__main__":

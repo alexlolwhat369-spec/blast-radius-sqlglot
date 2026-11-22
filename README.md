@@ -14,7 +14,9 @@ All committed indexes were derived from sqlglot commit `eb11aec4be8cb2122afe713a
 
 An additional map records which expression classes each pinned test constructs. It covers changes to class metadata such as `arg_types`, which import-time assignments do not appear in per-test line coverage.
 
-Source-test edits select the touched test method or its class. Unmapped fixtures, suspicious structural edits, and comments inserted into Python string interiors use wider fallbacks to avoid a 300-second miss.
+For dialect typing metadata, an AST index links changed dictionary entries to expression classes. A separate pinned-test trace records which tests actually request each `(dialect, expression class)` entry during type annotation.
+
+Source-test edits select every test in the changed file, since a syntax or import error can make the entire module fail. Unmapped fixtures, suspicious structural edits, and comments inserted into Python string interiors use wider fallbacks to avoid a 300-second miss.
 
 ## Local check
 
@@ -36,3 +38,5 @@ The current sample output is valid with **106.094 simulated seconds and zero mis
 The other `tools/build_*_index.py` scripts produce the static maps from the same checkout and the starter's `tests.json`. `requirements.lock` is the starter's pinned test environment; `coverage==7.10.7` was added locally for map generation. These tools are not copied into the runtime image.
 
 `tools/expression_plugin.py` traces expression-class construction under pytest and writes `expression_usage.json`. Compress it to `expression_usage.json.gz` before building the image; the raw file is ignored by Git.
+
+`tools/build_typing_index.py` records metadata-entry source lines, and `tools/typing_plugin.py` traces metadata reads under pytest. Their compressed outputs are `typing_index.json.gz` and `typing_usage.json.gz`.

@@ -7,6 +7,7 @@ import sys
 from concurrent.futures import Future
 
 import coverage
+import pytest
 
 
 _coverage = None
@@ -49,6 +50,7 @@ def pytest_sessionstart(session):
     _coverage.start()
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_runtest_setup(item):
     _coverage.switch_context(item.nodeid)
 

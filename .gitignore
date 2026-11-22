@@ -4,3 +4,4 @@ __pycache__/
 output.jsonl
 .coverage*
 expression_usage.json
+typing_usage.json
