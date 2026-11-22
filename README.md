@@ -18,6 +18,8 @@ For dialect typing metadata, an AST index links changed dictionary entries to ex
 
 Source-test edits select every test in the changed file, since a syntax or import error can make the entire module fail. Unmapped fixtures, suspicious structural edits, and comments inserted into Python string interiors use wider fallbacks to avoid a 300-second miss.
 
+The very large `test_max_nodes` test was omitted from the offline coverage run. Parser-core edits select it explicitly, so its absent coverage cannot silently omit it.
+
 ## Local check
 
 Use the [official starter kit](https://www.joinbuilders.org/buildathon/tracks/blast-radius/files/blast-radius-sample.tar.gz) for `sample/` and `score.py`:

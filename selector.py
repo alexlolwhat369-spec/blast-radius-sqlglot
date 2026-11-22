@@ -64,7 +64,7 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                         selected.update(typing_usage.get(f"{dialect}:{class_name}", []))
             if change.path in {"sqlglot/__init__.py", "sqlglot/dialects/__init__.py", "sqlglot/dialects/dialect.py"}:
                 selected.add("tests/dialects/test_dialect.py::TestDialect::test_lazy_load")
-            if change.path == "sqlglot/parser.py" and any("max_nodes" in line or "_node_count" in line for line in change.removed + change.added):
+            if change.path == "sqlglot/parser.py":
                 selected.add("tests/test_parser.py::TestParser::test_max_nodes")
             lines = coverage.get(change.path, {})
             touched = change.old_lines | change.anchors

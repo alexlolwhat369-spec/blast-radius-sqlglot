@@ -139,6 +139,16 @@ class CoreTests(unittest.TestCase):
         )
         self.assertTrue({"A", "B"} <= selected)
 
+    def test_untraced_large_parser_test_is_kept_for_parser_edits(self):
+        change = edit("sqlglot/parser.py", 100, "return value", "return other")
+        selected = impacted_tests(
+            [change], {}, [], {}, [], {},
+            {"class_assignment_lines": {}, "condition_starts": {}},
+            {}, {}, {}, {}, {}, {},
+            {"tests/test_parser.py::TestParser::test_max_nodes": 0},
+        )
+        self.assertIn("tests/test_parser.py::TestParser::test_max_nodes", selected)
+
 
 if __name__ == "__main__":
     unittest.main()
