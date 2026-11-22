@@ -119,6 +119,14 @@ class CoreTests(unittest.TestCase):
         )
         self.assertTrue({"A", "B"} <= selected)
 
+    def test_test_file_edit_covers_module_import_failures(self):
+        change = edit("tests/test_x.py", 42, "assert True", "assert )")
+        selected = impacted_tests(
+            [change], {}, [], {}, [], {}, {}, {}, {}, {}, {}, {},
+            {"tests/test_x.py": ["A", "B"]}, {"A": 0, "B": 1},
+        )
+        self.assertEqual(selected, {"A", "B"})
+
 
 if __name__ == "__main__":
     unittest.main()
