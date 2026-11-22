@@ -129,6 +129,27 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                         or dialect in dialect_index["secondary"].get(test_id, [])
                     )
                     continue
+                symbols = {
+                    code_index.get("class_assignment_symbols", {}).get(change.path, {}).get(str(line))
+                    for line in touched
+                } - {None}
+                readers = {
+                    coverage_ids[index]
+                    for symbol in symbols
+                    for source, read_line in code_index["attribute_reads"].get(symbol, [])
+                    for index in coverage.get(source, {}).get(str(read_line), [])
+                }
+                if readers:
+                    selected.update(readers)
+                    continue
+                module_users = {
+                    coverage_ids[index]
+                    for indexes in coverage.get(change.path, {}).values()
+                    for index in indexes
+                }
+                if module_users:
+                    selected.update(module_users)
+                    continue
             for line in touched:
                 direct = lines.get(str(line), [])
                 file_selected.update(coverage_ids[index] for index in direct)

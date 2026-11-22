@@ -129,6 +129,18 @@ class CoreTests(unittest.TestCase):
         )
         self.assertEqual(selected, {"A"})
 
+    def test_core_class_table_reaches_runtime_attribute_reader(self):
+        change = edit("sqlglot/parser.py", 20, 'FUNCTIONS = {"X": old}', 'FUNCTIONS = {"X": new}')
+        selected = impacted_tests(
+            [change], {"sqlglot/parser.py": {"100": [0]}}, ["A", "B"], {}, [], {},
+            {"class_assignment_lines": {"sqlglot/parser.py": [20]},
+             "class_assignment_symbols": {"sqlglot/parser.py": {"20": "FUNCTIONS"}},
+             "attribute_reads": {"FUNCTIONS": [["sqlglot/parser.py", 100]]},
+             "condition_starts": {}},
+            {}, {}, {}, {}, {}, {}, {"A": 0, "B": 1},
+        )
+        self.assertEqual(selected, {"A"})
+
     def test_typing_metadata_reads_are_selected(self):
         change = edit("sqlglot/typing/snowflake.py", 260, "exp.Sign: value", "exp.HexString: value")
         selected = impacted_tests(
