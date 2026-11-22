@@ -49,9 +49,14 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                 selected.add("tests/test_typing.py::TestTyping::test_no_redundant_expression_metadata")
                 dialect = Path(change.path).stem
                 metadata_lines = typing_index.get(change.path, {})
+                metadata_classes = set()
                 for line in change.old_lines | change.anchors:
-                    for class_name in metadata_lines.get(str(line), []):
-                        selected.update(typing_usage.get(f"{dialect}:{class_name}", []))
+                    metadata_classes.update(metadata_lines.get(str(line), []))
+                metadata_classes.update(
+                    re.findall(r"\bexp\.([A-Z]\w+)\b", "\n".join(change.removed + change.added))
+                )
+                for class_name in metadata_classes:
+                    selected.update(typing_usage.get(f"{dialect}:{class_name}", []))
             if change.path in {"sqlglot/__init__.py", "sqlglot/dialects/__init__.py", "sqlglot/dialects/dialect.py"}:
                 selected.add("tests/dialects/test_dialect.py::TestDialect::test_lazy_load")
             if change.path == "sqlglot/parser.py" and any("max_nodes" in line or "_node_count" in line for line in change.removed + change.added):
