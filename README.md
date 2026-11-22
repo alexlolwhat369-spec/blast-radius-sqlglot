@@ -25,7 +25,7 @@ python ..\starter\score.py ..\starter\sample ..\starter\sample\answers.json outp
 python tools\test_core.py
 ```
 
-The current sample output is valid with **98.764 simulated seconds and zero misses**. The server adds container CPU time and uses the middle of three runs. The final commits are unseen, so this sample result is not a final-score claim.
+The current sample output is valid with **99.034 simulated seconds and zero misses**. The server adds container CPU time and uses the middle of three runs. The final commits are unseen, so this sample result is not a final-score claim.
 
 ## Rebuilding the maps
 

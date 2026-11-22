@@ -17,6 +17,7 @@ def main() -> None:
     condition_starts = {}
     reads = defaultdict(list)
     assignments = {}
+    assignment_symbols = {}
     unsafe_comment_lines = {}
     for source in (source_root / "sqlglot").rglob("*.py"):
         relative = source.relative_to(source_root).as_posix()
@@ -33,6 +34,7 @@ def main() -> None:
             unsafe_comment_lines[relative] = sorted(unsafe)
         file_conditions = {}
         file_assignments = {}
+        file_assignment_symbols = {}
         for node in ast.walk(tree):
             if isinstance(node, (ast.If, ast.IfExp, ast.While)):
                 test = node.test
@@ -45,16 +47,22 @@ def main() -> None:
         for klass in (node for node in ast.walk(tree) if isinstance(node, ast.ClassDef)):
             for part in klass.body:
                 if isinstance(part, (ast.Assign, ast.AnnAssign)):
+                    targets = part.targets if isinstance(part, ast.Assign) else [part.target]
+                    names = [target.id for target in targets if isinstance(target, ast.Name)]
                     for line in range(part.lineno, part.end_lineno + 1):
                         file_assignments[line] = True
+                        if names:
+                            file_assignment_symbols[str(line)] = names[0]
         if file_conditions:
             condition_starts[relative] = {str(k): v for k, v in file_conditions.items()}
         if file_assignments:
             assignments[relative] = sorted(file_assignments)
+            assignment_symbols[relative] = file_assignment_symbols
     packed = {
         "condition_starts": condition_starts,
         "attribute_reads": {key: sorted(set(value)) for key, value in reads.items()},
         "class_assignment_lines": assignments,
+        "class_assignment_symbols": assignment_symbols,
         "unsafe_comment_lines": unsafe_comment_lines,
     }
     with gzip.open(output_file, "wt", encoding="utf-8", compresslevel=9) as stream:

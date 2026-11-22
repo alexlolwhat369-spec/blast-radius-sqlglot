@@ -52,14 +52,20 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                 continue
             if single_source_change and proven_equivalent(change, semantic_index):
                 continue
+            if change.path.startswith("sqlglot/typing/"):
+                selected.add("tests/test_typing.py::TestTyping::test_no_redundant_expression_metadata")
+            if change.path in {"sqlglot/__init__.py", "sqlglot/dialects/__init__.py", "sqlglot/dialects/dialect.py"}:
+                selected.add("tests/dialects/test_dialect.py::TestDialect::test_lazy_load")
+            if change.path == "sqlglot/parser.py" and any("max_nodes" in line or "_node_count" in line for line in change.removed + change.added):
+                selected.add("tests/test_parser.py::TestParser::test_max_nodes")
             lines = coverage.get(change.path, {})
             touched = change.old_lines or change.anchors
-            selected_before = len(selected)
+            file_selected: set[str] = set()
             assignment_lines = set(code_index["class_assignment_lines"].get(change.path, []))
             if touched and touched <= assignment_lines:
                 symbol_match = re.match(r"\s*([A-Z][A-Z0-9_]*)\s*=", change.removed[0]) if change.removed else None
-                if symbol_match and change.path.startswith("sqlglot/dialects/"):
-                    symbol = symbol_match.group(1)
+                if change.path.startswith("sqlglot/dialects/"):
+                    symbol = symbol_match.group(1) if symbol_match else code_index.get("class_assignment_symbols", {}).get(change.path, {}).get(str(min(touched)))
                     dialect = Path(change.path).stem
                     if single_source_change and symbol == "NUMERIC_ESCAPES" and len(change.removed) == len(change.added) == 1:
                         keys = changed_mapping_values(change.removed[0], change.added[0])
@@ -76,24 +82,36 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                         test_id
                         for source, line in code_index["attribute_reads"].get(symbol, [])
                         for index in coverage.get(source, {}).get(str(line), [])
-                        if (test_id := coverage_ids[index]) and dialect in dialect_index["primary"].get(test_id, [])
+                        if (test_id := coverage_ids[index]) and (
+                            dialect in dialect_index["primary"].get(test_id, [])
+                            or dialect in dialect_index["secondary"].get(test_id, [])
+                        )
                     }
-                    if 0 < len(relevant_ids) <= 16:
+                    if relevant_ids:
                         selected.update(relevant_ids)
                         continue
+                    selected.update(
+                        test_id for test_id in test_by_id
+                        if dialect in dialect_index["primary"].get(test_id, [])
+                        or dialect in dialect_index["secondary"].get(test_id, [])
+                    )
+                    continue
             for line in touched:
-                selected.update(coverage_ids[index] for index in lines.get(str(line), []))
+                file_selected.update(coverage_ids[index] for index in lines.get(str(line), []))
                 start = code_index["condition_starts"].get(change.path, {}).get(str(line))
                 if start is not None:
-                    selected.update(coverage_ids[index] for index in lines.get(str(start), []))
+                    file_selected.update(coverage_ids[index] for index in lines.get(str(start), []))
+            selected.update(file_selected)
             if change.path == "sqlglot/serde.py":
                 selected.update(process_tests)
-            if len(selected) == selected_before and (
+            if not file_selected and (
                 not change.old_lines
                 or not change.added
                 or any(re.match(r"\s*(?:from\s+|import\s+|def\s+|class\s+|@)", line) for line in change.removed + change.added)
             ):
                 selected.update(test_by_id)
+        if change.path.startswith("sqlglotc/") or change.path in {"setup.py", "pyproject.toml"}:
+            selected.update(test_id for test_id in test_by_id if test_id.startswith("tests/test_sqlglotc.py::"))
     return selected
 
 
