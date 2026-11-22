@@ -20,6 +20,8 @@ For dialect typing metadata, an AST index links changed dictionary entries to ex
 
 Source-test edits select every test in the changed file, since a syntax or import error can make the entire module fail. Unmapped fixtures, suspicious structural edits, and comments inserted into Python string interiors use wider fallbacks to avoid a 300-second miss.
 
+The pinned source text is also packed into a small index. At runtime, the selector applies each source diff and compiles the result without executing it; a compile failure selects the whole suite because test imports can fail before line coverage begins.
+
 Fixture dependencies include files loaded by `setUpClass`, which can fail an entire test class before any test method runs.
 
 The large `test_max_nodes` test was traced separately and merged into the coverage map. This keeps its 28.817-second runtime tied to the parser lines it actually executes.
