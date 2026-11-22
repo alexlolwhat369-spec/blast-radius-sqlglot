@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import re
 
 
 def _if_test(line: str) -> ast.AST | None:
@@ -87,6 +88,22 @@ def changed_mapping_values(old_line: str, new_line: str) -> set[str] | None:
     if not old_entries or not new_entries or old_entries.keys() != new_entries.keys():
         return None
     return {key for key in old_entries if old_entries[key] != new_entries[key]}
+
+
+def mapping_key_stable(old_line: str, new_line: str) -> bool:
+    """Reject precision based on a pinned key when the patch changes that key."""
+    old_match = re.match(r"\s*(['\"])(.*?)\1\s*:", old_line)
+    new_match = re.match(r"\s*(['\"])(.*?)\1\s*:", new_line)
+    if old_match or new_match:
+        return bool(old_match and new_match and old_match.group(2) == new_match.group(2))
+    try:
+        old = ast.parse(old_line.strip()).body[0]
+        new = ast.parse(new_line.strip()).body[0]
+    except SyntaxError:
+        return True
+    if isinstance(old, ast.Assign) and isinstance(old.value, ast.Dict):
+        return changed_mapping_values(old_line, new_line) is not None
+    return True
 
 
 def proven_equivalent(change, semantic_index: dict) -> bool:

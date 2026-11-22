@@ -4,12 +4,13 @@ import sys
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from patch_model import FileChange, parse_patch
 from scheduler import split
-from semantic import changed_mapping_values, proven_equivalent
+from semantic import changed_mapping_values, mapping_key_stable, proven_equivalent
 from selector import impacted_tests
 from syntax_check import has_compile_error, patched_source
 
@@ -122,6 +123,8 @@ class CoreTests(unittest.TestCase):
     def test_mapping_delta_needs_stable_keys(self):
         self.assertEqual(changed_mapping_values('X = {"u": (16, 4), "x": (16, 2)}', 'X = {"u": (17, 4), "x": (16, 2)}'), {"u"})
         self.assertIsNone(changed_mapping_values('X = {"u": (16, 4)}', 'X = {"u": (17, 4), "x": (16, 2)}'))
+        self.assertFalse(mapping_key_stable('"OLD": handler,', '"NEW": handler,'))
+        self.assertTrue(mapping_key_stable('"OLD": first,', '"OLD": second,'))
 
     def test_source_edit_and_addition_cover_both_hunks(self):
         change = FileChange(
@@ -195,6 +198,18 @@ class CoreTests(unittest.TestCase):
             table_readers={"sqlglot.parsers.dremio:DremioParser:FUNCTIONS:X": ["B"]},
         )
         self.assertEqual(selected, {"A", "B"})
+
+        with patch.dict("os.environ", {"BLAST_TABLE_PRECISE": "1"}):
+            precise = impacted_tests(
+                [change], {}, [], {}, [], {},
+                {"class_assignment_lines": {"sqlglot/parsers/dremio.py": [20]},
+                 "condition_starts": {}},
+                {"primary": {"A": ["dremio"]}, "secondary": {}},
+                {}, {}, {}, {}, {}, {"A": 0, "B": 1},
+                table_index={"sqlglot/parsers/dremio.py": {"20": [["DremioParser", "FUNCTIONS", "X"]]}},
+                table_readers={"sqlglot.parsers.dremio:DremioParser:FUNCTIONS:X": ["B"]},
+            )
+        self.assertEqual(precise, {"B"})
 
     def test_typing_metadata_reads_are_selected(self):
         change = edit("sqlglot/typing/snowflake.py", 260, "exp.Sign: value", "exp.HexString: value")

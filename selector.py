@@ -12,7 +12,7 @@ from pathlib import Path
 
 from patch_model import parse_patch
 from scheduler import split
-from semantic import changed_mapping_values, proven_equivalent
+from semantic import changed_mapping_values, mapping_key_stable, proven_equivalent
 from syntax_check import has_compile_error
 
 
@@ -87,10 +87,24 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                     if changed_keys is not None:
                         entries = {entry for entry in entries if entry[2] in changed_keys}
                 module = change.path.removesuffix(".py").replace("/", ".")
+                table_tests = set()
                 for klass, attribute, key in entries:
                     prefix = f"{module}:{klass}:{attribute}:"
-                    selected.update(table_readers.get(prefix + key, []))
-                    selected.update(table_readers.get(prefix + "*", []))
+                    table_tests.update(table_readers.get(prefix + key, []))
+                    table_tests.update(table_readers.get(prefix + "*", []))
+                selected.update(table_tests)
+                if (
+                    os.environ.get("BLAST_TABLE_PRECISE") == "1"
+                    and change.path.startswith(("sqlglot/parsers/", "sqlglot/generators/"))
+                    and len(entries) == 1
+                    and table_tests
+                    and (
+                        len(change.removed) != 1
+                        or len(change.added) != 1
+                        or mapping_key_stable(change.removed[0], change.added[0])
+                    )
+                ):
+                    continue
                 if change.path.startswith("sqlglot/expressions/"):
                     module = change.path.removesuffix(".py").replace("/", ".")
                     class_names = {
