@@ -14,9 +14,13 @@ All committed indexes were derived from sqlglot commit `eb11aec4be8cb2122afe713a
 
 An additional map records which expression classes each pinned test constructs. It covers changes to class metadata such as `arg_types`, which import-time assignments do not appear in per-test line coverage.
 
+Function-scope and module-symbol maps cover source lines that were not executed in the pinned run. A table index and pinned-test trace also connect literal dictionary keys in classes to their readers, including readers in subclasses.
+
 For dialect typing metadata, an AST index links changed dictionary entries to expression classes. A separate pinned-test trace records which tests actually request each `(dialect, expression class)` entry during type annotation.
 
 Source-test edits select every test in the changed file, since a syntax or import error can make the entire module fail. Unmapped fixtures, suspicious structural edits, and comments inserted into Python string interiors use wider fallbacks to avoid a 300-second miss.
+
+Fixture dependencies include files loaded by `setUpClass`, which can fail an entire test class before any test method runs.
 
 The large `test_max_nodes` test was traced separately and merged into the coverage map. This keeps its 28.817-second runtime tied to the parser lines it actually executes.
 
@@ -31,7 +35,7 @@ python ..\starter\score.py ..\starter\sample ..\starter\sample\answers.json outp
 python tools\test_core.py
 ```
 
-The current sample output is valid with **106.094 simulated seconds and zero misses**. The server adds container CPU time and uses the middle of three runs. The final commits are unseen, so this sample result is not a final-score claim.
+The current sample output is valid with **111.950 simulated seconds and zero misses**. The server adds container CPU time and uses the middle of three runs. The final commits are unseen, so this sample result is not a final-score claim.
 
 ## Rebuilding the maps
 
@@ -44,3 +48,5 @@ The other `tools/build_*_index.py` scripts produce the static maps from the same
 `tools/expression_plugin.py` traces expression-class construction under pytest and writes `expression_usage.json`. Compress it to `expression_usage.json.gz` before building the image; the raw file is ignored by Git.
 
 `tools/build_typing_index.py` records metadata-entry source lines, and `tools/typing_plugin.py` traces metadata reads under pytest. Their compressed outputs are `typing_index.json.gz` and `typing_usage.json.gz`.
+
+`tools/table_plugin.py` records dictionary-key reads from pinned parser, generator, dialect, expression, and typing classes. `tools/build_table_index.py`, `tools/build_class_mro.py`, and `tools/build_table_usage_index.py` produce the compressed runtime maps. Raw traces are local build artifacts and are not included in the submission.
