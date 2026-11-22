@@ -85,7 +85,6 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                                 test_id
                                 for key in keys
                                 for test_id in escape_index["dialect_key"].get(f"{dialect}:{key}", [])
-                                if dialect in dialect_index["primary"].get(test_id, [])
                             }
                             selected.update(relevant_ids)
                             continue

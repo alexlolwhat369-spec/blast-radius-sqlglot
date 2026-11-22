@@ -53,8 +53,8 @@ class CoreTests(unittest.TestCase):
             "if self.unknown is None:", "if self.unknown == None:",
         ), INDEX))
 
-    def test_tuple_length_proof_has_a_negative_case(self):
-        self.assertTrue(proven_equivalent(edit(
+    def test_version_boundary_is_not_assumed_equivalent(self):
+        self.assertFalse(proven_equivalent(edit(
             "sqlglot/generators/clickhouse.py", 811,
             "if self.dialect.version < (23, 12):", "if self.dialect.version <= (23, 12):",
         ), INDEX))

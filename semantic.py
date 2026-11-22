@@ -107,8 +107,7 @@ def proven_equivalent(change, semantic_index: dict) -> bool:
         return False
     operator_pair = (type(old_cmp.ops[0]), type(new_cmp.ops[0]))
     identity_pairs = {(ast.Is, ast.Eq), (ast.Eq, ast.Is), (ast.IsNot, ast.NotEq), (ast.NotEq, ast.IsNot)}
-    boundary_pairs = {(ast.Lt, ast.LtE), (ast.LtE, ast.Lt), (ast.Gt, ast.GtE), (ast.GtE, ast.Gt)}
-    if operator_pair not in identity_pairs | boundary_pairs:
+    if operator_pair not in identity_pairs:
         return False
     normalized = copy.deepcopy(old)
     normalized_compare = next(node for node in ast.walk(normalized) if isinstance(node, ast.Compare))
@@ -116,20 +115,6 @@ def proven_equivalent(change, semantic_index: dict) -> bool:
     if ast.dump(normalized, include_attributes=False) != ast.dump(new, include_attributes=False):
         return False
     left, right = old_cmp.left, old_cmp.comparators[0]
-    if operator_pair in boundary_pairs:
-        for attribute, literal in ((left, right), (right, left)):
-            if (
-                isinstance(attribute, ast.Attribute)
-                and isinstance(attribute.value, ast.Attribute)
-                and isinstance(attribute.value.value, ast.Name)
-                and attribute.value.value.id == "self"
-                and attribute.value.attr == "dialect"
-                and isinstance(literal, ast.Tuple)
-                and all(isinstance(element, ast.Constant) and isinstance(element.value, int) for element in literal.elts)
-            ):
-                length = semantic_index.get("fixed_tuple_lengths", {}).get(attribute.attr)
-                return length is not None and length != len(literal.elts)
-        return False
     fact = _matching_fact(change.path, next(iter(change.old_lines)), semantic_index)
     if fact is None:
         return False
