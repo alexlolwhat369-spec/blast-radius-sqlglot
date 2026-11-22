@@ -18,7 +18,7 @@ For dialect typing metadata, an AST index links changed dictionary entries to ex
 
 Source-test edits select every test in the changed file, since a syntax or import error can make the entire module fail. Unmapped fixtures, suspicious structural edits, and comments inserted into Python string interiors use wider fallbacks to avoid a 300-second miss.
 
-The very large `test_max_nodes` test was omitted from the offline coverage run. Parser-core edits select it explicitly, so its absent coverage cannot silently omit it.
+The large `test_max_nodes` test was traced separately and merged into the coverage map. This keeps its 28.817-second runtime tied to the parser lines it actually executes.
 
 ## Local check
 
@@ -36,6 +36,8 @@ The current sample output is valid with **106.094 simulated seconds and zero mis
 ## Rebuilding the maps
 
 `tools/coverage_plugin.py` records test contexts under `pytest`. Run the suite from the pinned sqlglot checkout with `SKIP_INTEGRATION=0`, `PYTHONPATH` pointing to this repository, and `-p tools.coverage_plugin`. Set `BLAST_COVERAGE_FILE` to keep coverage runs separate. `BLAST_IN_PROCESS_OPTIMIZER=1` and `BLAST_IN_PROCESS_EXECUTOR=1` make the respective subprocess tests traceable in separate runs. `tools/export_coverage.py` merges those coverage data files and writes `coverage.json.gz`.
+
+Trace `tests/test_parser.py::TestParser::test_max_nodes` in its own coverage run; its million-node input makes a whole-suite coverage run unnecessarily slow. The published map includes this separate trace.
 
 The other `tools/build_*_index.py` scripts produce the static maps from the same checkout and the starter's `tests.json`. `requirements.lock` is the starter's pinned test environment; `coverage==7.10.7` was added locally for map generation. These tools are not copied into the runtime image.
 
