@@ -13,6 +13,7 @@ from pathlib import Path
 from patch_model import parse_patch
 from scheduler import split
 from semantic import changed_mapping_values, proven_equivalent
+from syntax_check import has_compile_error
 
 
 ROOT = Path(__file__).resolve().parent
@@ -246,12 +247,17 @@ def main() -> None:
     module_index = read_index(ROOT / "module_index.json.gz")
     table_index = read_index(ROOT / "table_index.json.gz")
     table_readers = read_index(ROOT / "table_readers.json.gz")
+    source_index = read_index(ROOT / "source_index.json.gz")
     tests_by_file = {}
     for test in tests:
         tests_by_file.setdefault(test["file"], []).append(test["id"])
     for patch_file in sorted((DATA / "commits").glob("*.patch")):
-        changes = parse_patch(patch_file.read_text(encoding="utf-8"))
-        selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id, function_index=function_index, module_index=module_index, table_index=table_index, table_readers=table_readers)
+        patch = patch_file.read_text(encoding="utf-8")
+        if has_compile_error(patch, source_index):
+            selected_ids = set(test_by_id)
+        else:
+            changes = parse_patch(patch)
+            selected_ids = impacted_tests(changes, coverage, coverage_ids, fixtures, process_tests, semantic_index, code_index, dialect_index, escape_index, expression_usage, typing_index, typing_usage, tests_by_file, test_by_id, function_index=function_index, module_index=module_index, table_index=table_index, table_readers=table_readers)
         selected = {test_by_id[test_id] for test_id in selected_ids if test_id in test_by_id}
         workers = split(selected, milliseconds)
         sys.stdout.write(json.dumps({"commit": patch_file.stem, "workers": workers}, separators=(",", ":")) + "\n")

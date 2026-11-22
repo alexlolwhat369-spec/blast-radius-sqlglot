@@ -11,6 +11,7 @@ from patch_model import FileChange, parse_patch
 from scheduler import split
 from semantic import changed_mapping_values, proven_equivalent
 from selector import impacted_tests
+from syntax_check import has_compile_error, patched_source
 
 
 INDEX = json.loads((Path(__file__).resolve().parents[1] / "semantic_index.json").read_text(encoding="utf-8"))
@@ -21,6 +22,28 @@ def edit(path: str, line: int, old: str, new: str) -> FileChange:
 
 
 class CoreTests(unittest.TestCase):
+    def test_syntax_check_catches_invalid_patched_source(self):
+        patch = """diff --git a/sqlglot/x.py b/sqlglot/x.py
+--- a/sqlglot/x.py
++++ b/sqlglot/x.py
+@@ -1 +1 @@
+-value = 1
++value = (
+"""
+        self.assertTrue(has_compile_error(patch, {"sqlglot/x.py": "value = 1\n"}))
+
+    def test_syntax_check_applies_zero_length_insertion_after_anchor(self):
+        patch = """diff --git a/sqlglot/x.py b/sqlglot/x.py
+--- a/sqlglot/x.py
++++ b/sqlglot/x.py
+@@ -1,0 +2 @@
++middle = 3
+"""
+        self.assertEqual(
+            patched_source(patch, "sqlglot/x.py", "first = 1\nlast = 2\n"),
+            "first = 1\nmiddle = 3\nlast = 2\n",
+        )
+
     def test_class_setup_fixture_covers_executor_collection(self):
         fixtures = json.loads((Path(__file__).resolve().parents[1] / "fixture_index.json").read_text(encoding="utf-8"))
         users = fixtures["tests/fixtures/optimizer/tpc-ds/tpc-ds.sql"]
