@@ -81,6 +81,16 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
                     if file_selected:
                         selected.update(file_selected)
                         continue
+                if change.path.startswith(("sqlglot/parsers/", "sqlglot/generators/")):
+                    dialect = Path(change.path).stem
+                    dialect_tests = {
+                        test_id for test_id in test_by_id
+                        if dialect in dialect_index["primary"].get(test_id, [])
+                        or dialect in dialect_index["secondary"].get(test_id, [])
+                    }
+                    if dialect_tests:
+                        selected.update(dialect_tests)
+                        continue
                 symbol_match = re.match(r"\s*([A-Z][A-Z0-9_]*)\s*=", change.removed[0]) if change.removed else None
                 if change.path.startswith("sqlglot/dialects/"):
                     symbols = {

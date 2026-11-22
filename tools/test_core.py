@@ -117,6 +117,18 @@ class CoreTests(unittest.TestCase):
         )
         self.assertEqual(selected, {"B"})
 
+    def test_import_time_parser_table_reaches_dialect_tests(self):
+        change = edit("sqlglot/parsers/snowflake.py", 20, '"X": old', '"X": new')
+        selected = impacted_tests(
+            [change], {}, [], {}, [], {},
+            {"class_assignment_lines": {"sqlglot/parsers/snowflake.py": [20]},
+             "class_assignment_classes": {"sqlglot/parsers/snowflake.py": {"20": "SnowflakeParser"}},
+             "condition_starts": {}},
+            {"primary": {"A": ["snowflake"]}, "secondary": {}},
+            {}, {}, {}, {}, {}, {"A": 0, "B": 1},
+        )
+        self.assertEqual(selected, {"A"})
+
     def test_typing_metadata_reads_are_selected(self):
         change = edit("sqlglot/typing/snowflake.py", 260, "exp.Sign: value", "exp.HexString: value")
         selected = impacted_tests(
