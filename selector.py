@@ -70,6 +70,9 @@ def impacted_tests(changes, coverage: dict, coverage_ids: list[str], fixtures: d
             file_selected: set[str] = set()
             assignment_lines = set(code_index["class_assignment_lines"].get(change.path, []))
             if touched and touched <= assignment_lines:
+                if os.environ.get("BLAST_CLASS_PROBE") == "1":
+                    selected.update(test_by_id)
+                    continue
                 if change.path.startswith("sqlglot/expressions/"):
                     module = change.path.removesuffix(".py").replace("/", ".")
                     class_names = {
